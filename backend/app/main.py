@@ -1,0 +1,31 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import get_settings
+from app.routers import auth, resumes, jobs, companies, analytics
+
+settings = get_settings()
+
+app = FastAPI(
+    title="SortHire API",
+    description="AI-powered job application sorting backend",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins.split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(resumes.router)
+app.include_router(jobs.router)
+app.include_router(companies.router)
+app.include_router(analytics.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
