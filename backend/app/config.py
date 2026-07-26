@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     clearbit_api_key: str = ""
     bing_image_search_key: str = ""
 
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "text-embedding-3-small"
     match_green_threshold: float = 65.0
     cors_origins: str = "http://localhost:3000"
 
