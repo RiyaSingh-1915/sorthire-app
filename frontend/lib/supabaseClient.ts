@@ -6,7 +6,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function signInWithGoogle() {
-  return supabase.auth.signInWithOAuth({ provider: "google" });
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  return supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${origin}/dashboard`,
+    },
+  });
 }
 
 export async function signInWithEmail(email: string, password: string) {

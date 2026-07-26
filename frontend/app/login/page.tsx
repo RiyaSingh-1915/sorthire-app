@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from "@/lib/supabaseClient";
+import { signInWithGoogle, signInWithEmail, signUpWithEmail, supabase } from "@/lib/supabaseClient";
 import { Radar } from "lucide-react";
 
 export default function LoginPage() {
@@ -13,6 +13,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.push("/dashboard");
+      }
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        router.push("/dashboard");
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
