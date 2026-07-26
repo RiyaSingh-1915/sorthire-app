@@ -3,8 +3,17 @@ from app.routers.auth import get_current_user
 from app.db.supabase_client import get_supabase, RESUME_BUCKET
 from app.services import resume_parser, ai_suggestions, matching
 import uuid
+import io
+import re
+
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
+
+
+def sanitize_filename(filename: str) -> str:
+    cleaned = filename.replace(" ", "_")
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]", "", cleaned)
+    return cleaned
 
 
 @router.post("/upload")
@@ -20,14 +29,39 @@ async def upload_resume(
     supabase = get_supabase()
 
     # Deactivate previous active resume (we keep history, but only one active)
-    supabase.table("resumes").update({"is_active": False}).eq(
-        "user_id", user_id
-    ).eq("is_active", True).execute()
+    try:
+        supabase.table("resumes").update({"is_active": False}).eq(
+            "user_id", user_id
+        ).eq("is_active", True).execute()
+    except Exception as e:
+        raise HTTPException(500, f"Database error during deactivation: {e}")
 
-    storage_path = f"{user_id}/{uuid.uuid4()}_{file.filename}"
-    supabase.storage.from_(RESUME_BUCKET).upload(
-        storage_path, file_bytes, {"content-type": file.content_type}
-    )
+    safe_filename = sanitize_filename(file.filename)
+    storage_path = f"{user_id}/{uuid.uuid4()}_{safe_filename}"
+    
+    # Determine the content type (mime type)
+    content_type = file.content_type
+    if not content_type:
+        if file.filename.lower().endswith(".pdf"):
+            content_type = "application/pdf"
+        elif file.filename.lower().endswith(".docx"):
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            content_type = "application/octet-stream"
+
+    # Upload to Supabase Storage
+    try:
+        supabase.storage.from_(RESUME_BUCKET).upload(
+            path=storage_path,
+            file=io.BytesIO(file_bytes),
+            file_options={"content-type": content_type}
+        )
+    except Exception as e:
+        raise HTTPException(
+            500, 
+            f"Failed to upload resume to storage bucket '{RESUME_BUCKET}': {e}. "
+            "Please check if the bucket exists and policies are set correctly."
+        )
 
     ats = ai_suggestions.analyze_ats(parsed["raw_text"])
 
@@ -41,8 +75,17 @@ async def upload_resume(
         "ats_score": ats.get("ats_score"),
         "ats_feedback": ats,
     }
-    result = supabase.table("resumes").insert(row).execute()
-    return result.data[0]
+    
+    try:
+        result = supabase.table("resumes").insert(row).execute()
+        return result.data[0]
+    except Exception as e:
+        # Clean up the uploaded storage file if database insert fails
+        try:
+            supabase.storage.from_(RESUME_BUCKET).remove([storage_path])
+        except Exception:
+            pass
+        raise HTTPException(500, f"Database insert failed: {e}")
 
 
 @router.get("/active")
